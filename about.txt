@@ -1,0 +1,7 @@
+The Cooked Wiki Recipe Reader
+===========================
+
+Created by Krittika Goyal and Dean Cording
+
+Requires calibre >= 0.7.53
+

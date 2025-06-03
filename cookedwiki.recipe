@@ -1,0 +1,97 @@
+# vim:fileencoding=UTF-8:ts=4:sw=4:sta:et:sts=4:ai
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+import os
+
+from calibre.ebooks.oeb.base import XPath, xml2text
+from calibre.ptempfile import PersistentTemporaryFile
+from calibre.utils.localization import canonicalize_lang
+from calibre.web.feeds.news import BasicNewsRecipe
+from polyglot.urllib import unquote, urldefrag, urlparse
+
+DEFAULT_TITLE = 'Cooked.wiki Recipe'
+LOGO = None
+
+
+class WikiPage(BasicNewsRecipe):
+    title = DEFAULT_TITLE
+    language = 'en'
+    __author__ = 'Krittika Goyal, Dean Cording'
+    oldest_article = 1  # days
+    max_articles_per_feed = 99999999
+    use_embedded_content = False
+    resolve_internal_links = True
+
+    no_stylesheets = True
+    compress_news_images = True
+    extra_css = """body{font-family: Helvetica,Arial,sans-serif} """
+    conversion_options = {
+        'authors': 'Cooked.wiki',
+        'tags': 'recipes',
+        'publisher': 'Cooked.wiki',
+        'epub_flatten': True,
+    }
+
+    publication_type = ''
+    keep_only_tags = [dict(name='div', attrs={'class': ['title']}),
+        dict(name='img',attrs={'class': ['item-img']}),
+        dict(name='ul',attrs={'class': ['ingredients']}),
+        dict(name='ol', attrs={'class': ['steps']}),
+    ]
+
+    remove_tags = [
+        dict(name='button', attrs={'class': ['light-input']}),
+        dict(name='input', attrs={'name': ['ingredients']}),
+        dict(name='a', attrs={'class': ['selector']}),
+        dict(name='img', attrs={'class': ['icon']}),
+    ]
+
+    preprocess_regexps = [(re.compile(r'<li.*?><p>',re.IGNORECASE),lambda match: '<li>'),
+        (re.compile(r'</p>.*?</li>',re.IGNORECASE),lambda match: '</li>'),
+
+    ]
+
+    def preprocess_html(self, soup):
+        title = soup.find("div", class_="title")
+        if title:
+            title.name = "h1"
+        return soup
+
+
+    def parse_index(self):
+        urls = []  # REPLACE_ME_URLS
+        current_articles = []
+        feeds = []
+        self.log("URLs: ",urls)
+        for url in urls:
+            if url.find("https://cooked.wiki/") != 0:
+                url = "https://cooked.wiki/" + url
+            current_articles.append({'title': '', 'url': url,
+                                     'description': '', 'date': ''}),
+
+        if current_articles:
+            feeds.append(('Recipes', current_articles))
+        self.log("Feeds: ", feeds)
+        return feeds
+
+    def populate_article_metadata(self, article, soup, first):
+        if first:
+            title = soup.find('title')
+            if title:
+                title = self.tag_to_string(title)
+                article.title = title.removeprefix('Cooked - ').removesuffix(' - New Recipe')
+
+    def create_opf(self, feeds, dir=None):
+        'Set the title of the first article as the title of this book'
+        if self.title == DEFAULT_TITLE:
+            for f in feeds:
+                for a in f:
+                    self.title = a.title
+                    break
+        return BasicNewsRecipe.create_opf(self, feeds, dir=dir)
+
+
+    def postprocess_book(self, oeb, opts, log):
+        # Remove the useless first page, it contains the list of sections
+        oeb.manifest.remove(oeb.spine[0])
